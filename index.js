@@ -17,6 +17,13 @@ const server = http.createServer(async (req, res) => {
 
           if (text.startsWith('/start')) {
             await sendMessage(chatId, "سلام! به ربات فروش بازی **زی زی گیم** خوش آمدید. 🎮🔥\n\nبرای مشاهده بازی‌ها و خرید، از منوی زیر استفاده کنید:");
+          } 
+          // شرط جدید برای دکمه بازی های در دسترس
+          else if (text.includes('بازی') || text.includes('بازیهای در دسترس')) {
+            await sendMessage(chatId, "🎮 **لیست بازی‌های در دسترس زی زی گیم:**\n\n1️⃣ بازی اول (اکشن و ماجراجویی)\n2️⃣ بازی دوم (استراتژیک)\n\nبرای خرید یا اطلاعات بیشتر روی هر بازی کلیک کنید:");
+          } 
+          else {
+            await sendMessage(chatId, "پیام شما دریافت شد. برای شروع لطفا /start را ارسال کنید یا از منو استفاده کنید.");
           }
         }
       } catch (e) {}
@@ -25,7 +32,7 @@ const server = http.createServer(async (req, res) => {
     });
   } else {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Zi Zi Game Bot is running on Render!');
+    res.end('Zi Zi Game Bot is running!');
   }
 });
 
