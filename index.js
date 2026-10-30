@@ -1,45 +1,70 @@
-const { Telegraf } = require('telegraf');
+const http = require('http');
+const https = exactHttpsModule(); // استفاده از https داخلی
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-if (!BOT_TOKEN) {
-  console.error('BOT_TOKEN is not set in environment variables!');
-  process.exit(1);
+function exactHttpsModule() {
+  return require('https');
 }
 
-const bot = new Telegraf(BOT_TOKEN);
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ status: 'ok' }));
 
-// هندل کردن دستور /start
-bot.start((ctx) => {
-  ctx.reply("Welcome to **ZZ Games**! 🎮🔥\n\nChoose an option below:", {
-    parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🕹️ Action & Adventure Game", callback_data: "play_action" }],
-        [{ text: "🏰 Strategy Game", callback_data: "play_strategy" }],
-        [{ text: "⭐ Unlock All Games (50 Stars)", pay: true }]
-      ]
-    }
-  });
+  if (req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    
+    req.on('end', () => {
+      try {
+        const update = JSON.parse(body);
+        const BOT_TOKEN = process.env.BOT_TOKEN;
+
+        const chatId = update.message?.chat?.id || 
+                       update.callback_query?.message?.chat?.id;
+        const text = update.message?.text || '';
+
+        if (chatId && BOT_TOKEN && text.startsWith('/start')) {
+          const responseText = "Welcome to **ZZ Games**! 🎮🔥\n\nChoose an option below:";
+          const replyMarkup = {
+            inline_keyboard: [
+              [{ text: "🕹️ Action & Adventure Game", callback_data: "play_action" }],
+              [{ text: "🏰 Strategy Game", callback_data: "play_strategy" }],
+              [{ text: "⭐ Unlock All Games (50 Stars)", pay: true }]
+            ]
+          };
+
+          const postData = JSON.stringify({
+            chat_id: chatId,
+            text: responseText,
+            parse_mode: 'Markdown',
+            reply_markup: replyMarkup
+          });
+
+          const options = {
+            hostname: 'api.telegram.org',
+            port: 443,
+            path: `/bot${BOT_TOKEN}/sendMessage`,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(postData)
+            }
+          };
+
+          const tgReq = https.request(options, (tgRes) => {});
+          tgReq.on('error', (e) => {});
+          tgReq.write(postData);
+          tgReq.end();
+        }
+      } catch (err) {
+        console.error("Error:", err);
+      }
+    });
+  }
 });
 
-// راه‌اندازی وب‌هوک روی پورت رندر
 const PORT = process.env.PORT || 3000;
-const RENDER_URL = process.env.RENDER_EXTERNAL_URL; // رندر خودش این آدرس را می‌دهد
-
-if (RENDER_URL) {
-  bot.launch({
-    webhook: {
-      domain: RENDER_URL,
-      port: PORT,
-    },
-  });
-  console.log(`Bot started with webhook on port ${PORT}`);
-} else {
-  // حالت لوکال یا تست
-  bot.launch();
-  console.log('Bot started with long polling');
-}
-
-// بستن امن ربات
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
