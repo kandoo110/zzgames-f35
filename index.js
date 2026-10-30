@@ -2,9 +2,6 @@ const http = require('http');
 const https = require('https');
 
 const server = http.createServer((req, res) => {
-  console.log(`[HTTP] Received ${req.method} request to ${req.url}`);
-
-  // پاسخ سریع به تلگرام
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ status: 'ok' }));
 
@@ -15,7 +12,6 @@ const server = http.createServer((req, res) => {
     });
     
     req.on('end', () => {
-      console.log("[BODY RECEIVED]:", body); // چاپ محتوای دریافتی از تلگرام در لاگ رندر
       try {
         const update = JSON.parse(body);
         const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -24,10 +20,9 @@ const server = http.createServer((req, res) => {
                        update.callback_query?.message?.chat?.id;
         const text = update.message?.text || '';
 
-        console.log(`[PARSED] ChatID: ${chatId}, Text: ${text}`);
-
-        if (chatId && BOT_TOKEN && text.startsWith('/start')) {
-          const responseText = "Welcome to **ZZ Games**! 🎮🔥\n\nChoose an option below:";
+        if (chatId && BOT_TOKEN && (text.startsWith('/start') || text.startsWith('/games'))) {
+          // متن ساده بدون قالب‌بندی پیچیده مارک‌داون که باعث خطای 400 نشود
+          const responseText = "Welcome to ZZ Games! 🎮🔥\n\nChoose an option below:";
           const replyMarkup = {
             inline_keyboard: [
               [{ text: "🕹️ Action & Adventure Game", callback_data: "play_action" }],
@@ -39,7 +34,6 @@ const server = http.createServer((req, res) => {
           const postData = JSON.stringify({
             chat_id: chatId,
             text: responseText,
-            parse_mode: 'Markdown',
             reply_markup: replyMarkup
           });
 
@@ -55,25 +49,24 @@ const server = http.createServer((req, res) => {
           };
 
           const tgReq = https.request(options, (tgRes) => {
-            console.log("[TELEGRAM API] Message sent successfully status:", tgRes.statusCode);
+            console.log("Telegram response status:", tgRes.statusCode);
           });
 
           tgReq.on('error', (e) => {
-            console.error(`[TELEGRAM ERROR]: ${e.message}`);
+            console.error(`Telegram Error: ${e.message}`);
           });
 
           tgReq.write(postData);
           tgReq.end();
         }
       } catch (err) {
-        console.error("[JSON ERROR]:", err);
+        console.error("Error:", err);
       }
     });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-// نکته بسیار مهم: اضافه کردن '0.0.0.0' برای دریافت درخواست‌های خارجی در رندر
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
 });
