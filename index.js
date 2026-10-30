@@ -6,6 +6,7 @@ function httpsModule() {
 }
 
 const server = http.createServer((req, res) => {
+  // اگر درخواست برای دریافت خودِ صفحه بازی (فایل HTML) بود
   if (req.method === 'GET' && (req.url === '/' || req.url === '/game')) {
     const fs = require('fs');
     const path = require('path');
@@ -22,12 +23,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // پاسخ پیش‌فرض به سایر درخواست‌های GET (مانند آپتایم)
   if (req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok' }));
+    res.end(JSON.stringify({ status: 'ok', server: 'online' }));
     return;
   }
 
+  // مدیریت درخواست‌های POST (وب‌هوک تلگرام)
   if (req.method === 'POST') {
     let body = '';
     req.on('data', chunk => {
@@ -43,18 +46,22 @@ const server = http.createServer((req, res) => {
         const BOT_TOKEN = process.env.BOT_TOKEN;
         if (!BOT_TOKEN) return;
 
-        // تاییدیه پرداخت موفق
+        // --- ۱. مدیریت مراحل پرداخت ستاره تلگرام ---
+
+        // تاییدیه نهایی قبل از پرداخت (وقتی کاربر دکمه‌ی پرداخت نهایی را می‌زند)
         if (update.pre_checkout_query) {
           answerPreCheckoutQuery(BOT_TOKEN, update.pre_checkout_query.id);
           return;
         }
 
+        // اگر پرداخت با موفقیت انجام شد
         if (update.message?.successful_payment) {
           const chatId = update.message.chat.id;
           const gameUrl = process.env.GAME_URL || 'https://zzgames-f35.onrender.com';
-          sendTelegramMessage(BOT_TOKEN, chatId, "🎉 پرداخت با موفقیت انجام شد! دکمه زیر برای ورود به بازی باز شد:", {
+          
+          sendTelegramMessage(BOT_TOKEN, chatId, "🎉 تبریک! پرداخت شما با موفقیت تأیید شد. اکنون می‌توانید با جنگنده F-35 به پرواز درآیید:", {
             inline_keyboard: [
-              [{ text: "🚀 ورود به بازی F-35", web_app: { url: gameUrl } }]
+              [{ text: "🚀 شروع بازی F-35 (تمام‌صفحه)", web_app: { url: gameUrl } }]
             ]
           });
           return;
@@ -70,11 +77,12 @@ const server = http.createServer((req, res) => {
 
         if (!chatId) return;
 
-        // ۱. مدیریت کلیک روی دکمه‌های شیشه‌ای
+        // --- ۲. مدیریت کلیک روی دکمه‌های شیشه‌ای ---
         if (callbackQueryId) {
+          // بستن حالت لودینگ دکمه
           const answerData = JSON.stringify({
             callback_query_id: callbackQueryId,
-            text: "بارگذاری پیش‌نمایش..."
+            text: "در حال پردازش..."
           });
 
           const answerReq = https.request({
@@ -89,39 +97,23 @@ const server = http.createServer((req, res) => {
           answerReq.write(answerData);
           answerReq.end();
 
-          // وقتی روی بازی یا آنلاک کلیک می‌کند، به جای فاکتور خشک، پیش‌نمایش و عکس محیط بازی فرستیده می‌شود
+          // الف) وقتی روی دکمه بازی می‌زند -> ارسال پیش‌نمایش (عکس، توضیحات و دکمه خرید)
           if (callbackData === 'play_action' || callbackData === 'unlock_games') {
             sendGamePreview(BOT_TOKEN, chatId);
-          } else if (callbackData === 'buy_now') {
-            // حالا فاکتور پرداخت ارسال می‌شود
+          } 
+          // ب) وقتی روی دکمه‌ی پرداخت و شروع بازی می‌زند -> ارسال فاکتور رسمی ۵۰ ستاره
+          else if (callbackData === 'buy_now') {
             sendTelegramInvoice(BOT_TOKEN, chatId);
-          } else if (callbackData === 'play_strategy') {
-            sendTelegramMessage(BOT_TOKEN, chatId, "🏰 بخش بازی استراتژیک به‌زودی راه‌اندازی می‌شود!", null);
           }
           return;
         }
 
-        // ۲. پاسخ به دستور /start
-        if (text.startsWith('/start')) {
-          const responseText = "سلام! به پلتفرم ZZ Games خوش آمدید 🎮🔥\n\nبرای مشاهده پیش‌نمایش و دسترسی به بازی فایتینگ F-35، از دکمه زیر استفاده کنید:";
+        // --- ۳. پاسخ به دستورات متنی /start و /games ---
+        if (text.startsWith('/start') || text.startsWith('/games')) {
+          const responseText = "سلام! به پلتفرم ZZ Games خوش آمدید 🎮🔥\n\nاز دکمه زیر برای مشاهده پیش‌نمایش و فعال‌سازی بازی نبرد جنگنده‌ی F-35 استفاده کنید:";
           const replyMarkup = {
             inline_keyboard: [
-              [{ text: "🚀 پیش‌نمایش و خرید بازی F-35 (50 Stars)", callback_data: "play_action" }],
-              [{ text: "🏰 Strategy Game", callback_data: "play_strategy" }],
-              [{ text: "⭐ Unlock All Games", callback_data: "unlock_games" }]
-            ]
-          };
-          sendTelegramMessage(BOT_TOKEN, chatId, responseText, replyMarkup);
-        }
-        
-        // ۳. پاسخ به دستور /games
-        if (text.startsWith('/games')) {
-          const responseText = "🎯 لیست بازی‌های اختصاصی ZZ Games:";
-          const replyMarkup = {
-            inline_keyboard: [
-              [{ text: "🚀 پیش‌نمایش و خرید بازی F-35 (50 Stars)", callback_data: "play_action" }],
-              [{ text: "🏰 Strategy Game", callback_data: "play_strategy" }],
-              [{ text: "⭐ Unlock All Games", callback_data: "unlock_games" }]
+              [{ text: "🚀 پیش‌نمایش و فعال‌سازی F-35 (50 Stars)", callback_data: "play_action" }]
             ]
           };
           sendTelegramMessage(BOT_TOKEN, chatId, responseText, replyMarkup);
@@ -134,14 +126,17 @@ const server = http.createServer((req, res) => {
   }
 });
 
-// ارسال عکس پیش‌نمایش محیط بازی همراه با دکمه خرید
+// --- ۴. توابع کاربردی تلگرام ---
+
+// ارسال پیش‌نمایش بازی همراه با عکس واقعی، توضیحات و دکمه‌ی خرید
 function sendGamePreview(token, chatId) {
-  // می‌توانید به جای لینک عکس زیر، لینک مستقیم اسکرین‌شات محیط بازی خودتان را قرار دهید
-  const photoUrl = "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=800";
-  const caption = "🎮 **معرفی بازی F-35 Lightning II**\n\n" +
-                  "✨ نبردی نفس‌گیر در آسمان با گرافیک جذاب HTML5\n" +
-                  "🎯 ثبت رکورد، چالش‌های هیجان‌انگیز و اکشن تمام‌عیار\n\n" +
-                  "💎 **هزینه دسترسی دائم:** ۵۰ ستاره تلگرام";
+  // لینک عکس جدید شما که در گیت‌هاب قرار دارد.
+  // نکته: ما از آدرس خام (raw) گیت‌هاب استفاده می‌کنیم تا تلگرام بتواند عکس را دریافت کند.
+  const photoUrl = "https://raw.githubusercontent.com/kandoo110/zzgames-f35/main/f35.jpg";
+  const caption = "🎮 **نبرد جنگنده F-35 Lightning II**\n\n" +
+                  "✨ یک بازی اکشن جذاب و گرافیکی در آسمان\n" +
+                  "🎯 ثبت رکورد، نوار سلامت و چالش‌های هیجان‌انگیز\n\n" +
+                  "💎 **دسترسی دائمی:** فقط ۵۰ ستاره تلگرام";
 
   const postData = JSON.stringify({
     chat_id: chatId,
@@ -150,7 +145,7 @@ function sendGamePreview(token, chatId) {
     parse_mode: "Markdown",
     reply_markup: {
       inline_keyboard: [
-        [{ text: "💳 پرداخت ۵۰ ستاره و دریافت بازی", callback_data: "buy_now" }]
+        [{ text: "💳 پرداخت ۵۰ ستاره و شروع بازی", callback_data: "buy_now" }]
       ]
     }
   });
@@ -167,18 +162,17 @@ function sendGamePreview(token, chatId) {
     }
   };
 
-  const req = https.request(options, (res) => {
-    console.log("Preview status:", res.statusCode);
-  });
+  const req = https.request(options);
   req.on('error', (e) => console.error("Preview Error:", e.message));
   req.write(postData);
   req.end();
 }
 
+// تاییدیه نهایی قبل از پرداخت تلگرام
 function answerPreCheckoutQuery(token, preCheckoutQueryId) {
   const data = JSON.stringify({
     pre_checkout_query_id: preCheckoutQueryId,
-    ok: true
+    ok: true // پرداخت مجاز است
   });
 
   const options = {
@@ -193,10 +187,11 @@ function answerPreCheckoutQuery(token, preCheckoutQueryId) {
     }
   };
 
-  const req = https.request(options, (res));
+  const req = https.request(options);
   req.end(data);
 }
 
+// ارسال پیام متنی معمولی با دکمه‌های شیشه‌ای
 function sendTelegramMessage(token, chatId, text, replyMarkup) {
   const postData = JSON.stringify({
     chat_id: chatId,
@@ -217,18 +212,20 @@ function sendTelegramMessage(token, chatId, text, replyMarkup) {
   };
 
   const req = https.request(options);
-  req.end(postData);
+  req.write(postData);
+  req.end();
 }
 
+// ارسال فاکتور رسمی پرداخت ستاره‌های تلگرام (Telegram Stars)
 function sendTelegramInvoice(token, chatId) {
   const invoiceData = JSON.stringify({
     chat_id: chatId,
-    title: "F-35 Game VIP Access",
-    description: "Unlock F-35 HTML5 Game permanently for 50 Stars!",
-    payload: "f35_game_vip_payload",
-    currency: "XTR",
+    title: "Unlock F-35 Game",
+    description: "Pay 50 Stars to permanently unlock the F-35 action game!",
+    payload: "f35_game_access_payload",
+    currency: "XTR", // واحد پول ستاره‌های تلگرام
     prices: [
-      { label: "VIP Game Access", amount: 50 }
+      { label: "Game Access", amount: 50 } // ۵0 ستاره تلگرام
     ]
   });
 
@@ -245,7 +242,8 @@ function sendTelegramInvoice(token, chatId) {
   };
 
   const req = https.request(options);
-  req.end(invoiceData);
+  req.write(invoiceData);
+  req.end();
 }
 
 const PORT = process.env.PORT || 10000;
