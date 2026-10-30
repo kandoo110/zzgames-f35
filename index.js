@@ -1,11 +1,14 @@
 const http = require('http');
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
+const https = httpsModule();
+
+function httpsModule() {
+  return require('https');
+}
 
 const server = http.createServer((req, res) => {
-  // اگر درخواست برای دریافت خودِ صفحه بازی (فایل HTML) بود
   if (req.method === 'GET' && (req.url === '/' || req.url === '/game')) {
+    const fs = require('fs');
+    const path = require('path');
     const filePath = path.join(__dirname, 'index.html');
     fs.readFile(filePath, (err, data) => {
       if (err) {
@@ -19,14 +22,12 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // پاسخ پیش‌فرض به سایر درخواست‌های GET
   if (req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok' }));
     return;
   }
 
-  // مدیریت درخواست‌های POST (وب‌هوک تلگرام)
   if (req.method === 'POST') {
     let body = '';
     req.on('data', chunk => {
@@ -42,6 +43,23 @@ const server = http.createServer((req, res) => {
         const BOT_TOKEN = process.env.BOT_TOKEN;
         if (!BOT_TOKEN) return;
 
+        // بررسی تایید پرداخت موفق (PreCheckoutQuery یا SuccessfulPayment)
+        if (update.pre_checkout_query) {
+          answerPreCheckoutQuery(BOT_TOKEN, update.pre_checkout_query.id);
+          return;
+        }
+
+        if (update.message?.successful_payment) {
+          const chatId = update.message.chat.id;
+          const gameUrl = process.env.GAME_URL || 'https://zzgames-f35.onrender.com';
+          sendTelegramMessage(BOT_TOKEN, chatId, "🎉 پرداخت شما با موفقیت تأیید شد! اکنون می‌توانید از بازی لذت ببرید:", {
+            inline_keyboard: [
+              [{ text: "🚀 ورود به بازی F-35", web_app: { url: gameUrl } }]
+            ]
+          });
+          return;
+        }
+
         const callbackQuery = update.callback_query;
         const message = update.message;
 
@@ -56,7 +74,7 @@ const server = http.createServer((req, res) => {
         if (callbackQueryId) {
           const answerData = JSON.stringify({
             callback_query_id: callbackQueryId,
-            text: "بارگذاری بازی..."
+            text: "در حال صدور فاکتور..."
           });
 
           const answerReq = https.request({
@@ -71,29 +89,21 @@ const server = http.createServer((req, res) => {
           answerReq.write(answerData);
           answerReq.end();
 
-          if (callbackData === 'play_action') {
-            // استفاده از لینک خودِ سرویس رندر برای باز کردن فایل HTML بازی
-            const gameUrl = process.env.GAME_URL || 'https://zzgames-f35.onrender.com';
-            
-            sendTelegramMessage(BOT_TOKEN, chatId, "🕹️ برای شروع پرواز با جنگنده F-35 روی دکمه زیر بزنید:", {
-              inline_keyboard: [
-                [{ text: "🚀 اجرای بازی F-35 (تمام‌صفحه)", web_app: { url: gameUrl } }]
-              ]
-            });
+          // چه روی دکمه بازی و چه روی دکمه آنلاک بزنند، فاکتور پرداخت ۵۰ ستاره ارسال می‌شود
+          if (callbackData === 'play_action' || callbackData === 'unlock_games') {
+            sendTelegramInvoice(BOT_TOKEN, chatId);
           } else if (callbackData === 'play_strategy') {
-            sendTelegramMessage(BOT_TOKEN, chatId, "🏰 بخش بازی استراتژیک به‌زودی به مجموعه اضافه خواهد شد!", null);
-          } else if (callbackData === 'unlock_games') {
-            sendTelegramMessage(BOT_TOKEN, chatId, "⭐ سیستم پرداخت و باز کردن همه بازی‌ها با ستاره‌های تلگرام در حال آماده‌سازی است.", null);
+            sendTelegramMessage(BOT_TOKEN, chatId, "🏰 بخش بازی استراتژیک به‌زودی راه‌اندازی می‌شود!", null);
           }
           return;
         }
 
         // ۲. پاسخ به دستور /start
         if (text.startsWith('/start')) {
-          const responseText = "سلام! به پلتفرم ZZ Games خوش آمدید 🎮🔥\n\nاز منوی زیر بازی مورد نظرتان را انتخاب کنید:";
+          const responseText = "سلام! به پلتفرم ZZ Games خوش آمدید 🎮🔥\n\nبرای دسترسی به بازی F-35 و تمامی امکانات، لطفا اکانت خود را ویژه کنید:";
           const replyMarkup = {
             inline_keyboard: [
-              [{ text: "🕹️ Action & Adventure Game", callback_data: "play_action" }],
+              [{ text: "🚀 Play F-35 Game (50 Stars)", callback_data: "play_action" }],
               [{ text: "🏰 Strategy Game", callback_data: "play_strategy" }],
               [{ text: "⭐ Unlock All Games (50 Stars)", callback_data: "unlock_games" }]
             ]
@@ -103,10 +113,10 @@ const server = http.createServer((req, res) => {
         
         // ۳. پاسخ به دستور /games
         if (text.startsWith('/games')) {
-          const responseText = "🎯 لیست بازی‌های فعال در ZZ Games:\n\nلطفاً یکی را انتخاب کنید:";
+          const responseText = "🎯 لیست بازی‌های اختصاصی ZZ Games:\n\nبرای باز کردن بازی‌ها نیازمند پرداخت ۵۰ ستاره تلگرام هستید:";
           const replyMarkup = {
             inline_keyboard: [
-              [{ text: "🕹️ Action & Adventure Game", callback_data: "play_action" }],
+              [{ text: "🚀 Play F-35 Game (50 Stars)", callback_data: "play_action" }],
               [{ text: "🏰 Strategy Game", callback_data: "play_strategy" }],
               [{ text: "⭐ Unlock All Games (50 Stars)", callback_data: "unlock_games" }]
             ]
@@ -120,6 +130,33 @@ const server = http.createServer((req, res) => {
     });
   }
 });
+
+// تایید نهایی تراکنش پرداخت تلگرام
+function answerPreCheckoutQuery(token, preCheckoutQueryId) {
+  const data = JSON.stringify({
+    pre_checkout_query_id: preCheckoutQueryId,
+    ok: true
+  });
+
+  const options = {
+    hostname: 'api.telegram.org',
+    port: 443,
+    path: `/bot${token}/answerPreCheckoutQuery`,
+    method: 'POST',
+    family: 4,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(data)
+    }
+  };
+
+  const req = https.request(options, (res) => {
+    console.log("Pre-checkout status:", res.statusCode);
+  });
+  req.on('error', (e) => console.error("Pre-checkout Error:", e.message));
+  req.write(data);
+  req.end();
+}
 
 function sendTelegramMessage(token, chatId, text, replyMarkup) {
   const postData = JSON.stringify({
@@ -141,22 +178,46 @@ function sendTelegramMessage(token, chatId, text, replyMarkup) {
   };
 
   const req = https.request(options, (res) => {
-    console.log("Telegram response status:", res.statusCode);
+    console.log("Telegram message status:", res.statusCode);
   });
-
-  req.on('error', (e) => {
-    console.error(`Telegram Error: ${e.message}`);
-  });
-
+  req.on('error', (e) => console.error("Telegram Error:", e.message));
   req.write(postData);
+  req.end();
+}
+
+function sendTelegramInvoice(token, chatId) {
+  const invoiceData = JSON.stringify({
+    chat_id: chatId,
+    title: "Unlock F-35 Game & VIP Access",
+    description: "Pay 50 Telegram Stars to unlock and play F-35 Game instantly!",
+    payload: "f35_game_vip_payload",
+    currency: "XTR",
+    prices: [
+      { label: "VIP Game Access", amount: 50 }
+    ]
+  });
+
+  const options = {
+    hostname: 'api.telegram.org',
+    port: 443,
+    path: `/bot${token}/sendInvoice`,
+    method: 'POST',
+    family: 4,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(invoiceData)
+    }
+  };
+
+  const req = https.request(options, (res) => {
+    console.log("Invoice status:", res.statusCode);
+  });
+  req.on('error', (e) => console.error("Invoice Error:", e.message));
+  req.write(invoiceData);
   req.end();
 }
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
-  echoServerStatus();
-});
-
-function echoServerStatus() {
   console.log(`Server is running on port ${PORT}`);
-}
+});
