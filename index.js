@@ -27,14 +27,13 @@ const server = http.createServer((req, res) => {
 
         if (!chatId) return;
 
-        // ۱. اگر روی دکمه شیشه‌ای کلیک شد (برای متوقف کردن حالت چرخش و لودینگ)
+        // ۱. اگر روی دکمه شیشه‌ای کلیک شد
         if (callbackQueryId) {
           const answerData = JSON.stringify({
             callback_query_id: callbackQueryId,
             text: "بارگذاری بازی..."
           });
 
-          // استفاده از family: 4 برای جلوگیری از خطای شبکه رندر (ENETUNREACH)
           const answerReq = https.request({
             hostname: 'api.telegram.org',
             port: 443,
@@ -47,9 +46,8 @@ const server = http.createServer((req, res) => {
           answerReq.write(answerData);
           answerReq.end();
 
-          // واکنش به دکمه‌های مختلف
+          // واکنش به دکمه اکشن
           if (callbackData === 'play_action') {
-            // لینک بازی F-35 خود را اینجا بگذارید (یا متغیر محیطی GAME_URL)
             const gameUrl = process.env.GAME_URL || 'https://zzgames-f35.onrender.com';
             
             sendTelegramMessage(BOT_TOKEN, chatId, "🕹️ برای اجرای بازی F-35 روی دکمه زیر کلیک کنید:", {
@@ -85,7 +83,6 @@ const server = http.createServer((req, res) => {
   }
 });
 
-// تابع ارسال پیام با پایداری کامل و اجبار به IPv4
 function sendTelegramMessage(token, chatId, text, replyMarkup) {
   const postData = JSON.stringify({
     chat_id: chatId,
@@ -98,7 +95,7 @@ function sendTelegramMessage(token, chatId, text, replyMarkup) {
     port: 443,
     path: `/bot${token}/sendMessage`,
     method: 'POST',
-    family: 4, // جلوگیری از خطای اتصال اینترنت در رندر
+    family: 4,
     headers: {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(postData)
