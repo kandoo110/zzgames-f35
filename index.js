@@ -17,7 +17,6 @@ const server = http.createServer((req, res) => {
         const BOT_TOKEN = process.env.BOT_TOKEN;
         if (!BOT_TOKEN) return;
 
-        // بررسی اینکه آیا کلیک روی دکمه بوده یا پیام متنی
         const callbackQuery = update.callback_query;
         const message = update.message;
 
@@ -28,41 +27,45 @@ const server = http.createServer((req, res) => {
 
         if (!chatId) return;
 
-        // ۱. اگر روی دکمه شیشه‌ای کلیک شده باشد
+        // ۱. اگر روی دکمه شیشه‌ای کلیک شد (برای متوقف کردن حالت چرخش و لودینگ)
         if (callbackQueryId) {
-          // پاسخ سریع به تلگرام برای متوقف کردن حالت چرخش دکمه
           const answerData = JSON.stringify({
             callback_query_id: callbackQueryId,
-            text: "Processing your request..."
+            text: "بارگذاری بازی..."
           });
 
+          // استفاده از family: 4 برای جلوگیری از خطای شبکه رندر (ENETUNREACH)
           const answerReq = https.request({
             hostname: 'api.telegram.org',
             port: 443,
             path: `/bot${BOT_TOKEN}/answerCallbackQuery`,
             method: 'POST',
+            family: 4, 
             headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(answerData) }
           });
+          answerReq.on('error', (e) => console.error("Answer Error:", e.message));
           answerReq.write(answerData);
           answerReq.end();
 
-          // ارسال پیام متناسب با دکمه کلیک شده
-          let responseText = "";
+          // واکنش به دکمه‌های مختلف
           if (callbackData === 'play_action') {
-            responseText = "🕹️ You selected Action & Adventure Game! Get ready to play...";
+            // لینک بازی F-35 خود را اینجا بگذارید (یا متغیر محیطی GAME_URL)
+            const gameUrl = process.env.GAME_URL || 'https://zzgames-f35.onrender.com;
+            
+            sendTelegramMessage(BOT_TOKEN, chatId, "🕹️ برای اجرای بازی F-35 روی دکمه زیر کلیک کنید:", {
+              inline_keyboard: [
+                [{ text: "🚀 اجرای بازی F-35", web_app: { url: gameUrl } }]
+              ]
+            });
           } else if (callbackData === 'play_strategy') {
-            responseText = "🏰 You selected Strategy Game! Build your empire...";
+            sendTelegramMessage(BOT_TOKEN, chatId, "🏰 بخش استراتژی به زودی راه‌اندازی می‌شود!", null);
           } else if (callbackData === 'unlock_games') {
-            responseText = "⭐ Unlock all games feature coming soon via Telegram Stars!";
-          }
-
-          if (responseText) {
-            sendTelegramMessage(BOT_TOKEN, chatId, responseText, null);
+            sendTelegramMessage(BOT_TOKEN, chatId, "⭐ سیستم پرداخت و باز کردن همه بازی‌ها با ستاره‌های تلگرام در حال توسعه است.", null);
           }
           return;
         }
 
-        // ۲. اگر دستورات متنی /start یا /games ارسال شده باشد
+        // ۲. پاسخ به دستورات /start یا /games
         if (text.startsWith('/start') || text.startsWith('/games')) {
           const responseText = "Welcome to ZZ Games! 🎮🔥\n\nChoose an option below:";
           const replyMarkup = {
@@ -82,7 +85,7 @@ const server = http.createServer((req, res) => {
   }
 });
 
-// تابع کمکی برای ارسال پیام به تلگرام
+// تابع ارسال پیام با پایداری کامل و اجبار به IPv4
 function sendTelegramMessage(token, chatId, text, replyMarkup) {
   const postData = JSON.stringify({
     chat_id: chatId,
@@ -95,6 +98,7 @@ function sendTelegramMessage(token, chatId, text, replyMarkup) {
     port: 443,
     path: `/bot${token}/sendMessage`,
     method: 'POST',
+    family: 4, // جلوگیری از خطای اتصال اینترنت در رندر
     headers: {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(postData)
