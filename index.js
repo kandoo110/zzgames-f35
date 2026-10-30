@@ -1,5 +1,9 @@
 const http = require('http');
-const https = require('https');
+const https = httpsModule();
+
+function httpsModule() {
+  return require('https');
+}
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -21,13 +25,12 @@ const server = http.createServer((req, res) => {
         const text = update.message?.text || '';
 
         if (chatId && BOT_TOKEN && (text.startsWith('/start') || text.startsWith('/games'))) {
-          // متن ساده بدون قالب‌بندی پیچیده مارک‌داون که باعث خطای 400 نشود
           const responseText = "Welcome to ZZ Games! 🎮🔥\n\nChoose an option below:";
           const replyMarkup = {
             inline_keyboard: [
               [{ text: "🕹️ Action & Adventure Game", callback_data: "play_action" }],
               [{ text: "🏰 Strategy Game", callback_data: "play_strategy" }],
-              [{ text: "⭐ Unlock All Games (50 Stars)", pay: true }]
+              [{ text: "⭐ Unlock All Games (50 Stars)", callback_data: "unlock_games" }]
             ]
           };
 
