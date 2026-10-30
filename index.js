@@ -1,11 +1,10 @@
 const http = require('http');
-const https = exactHttpsModule(); // استفاده از https داخلی
-
-function exactHttpsModule() {
-  return require('https');
-}
+const https = require('https');
 
 const server = http.createServer((req, res) => {
+  console.log(`[HTTP] Received ${req.method} request to ${req.url}`);
+
+  // پاسخ سریع به تلگرام
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ status: 'ok' }));
 
@@ -16,6 +15,7 @@ const server = http.createServer((req, res) => {
     });
     
     req.on('end', () => {
+      console.log("[BODY RECEIVED]:", body); // چاپ محتوای دریافتی از تلگرام در لاگ رندر
       try {
         const update = JSON.parse(body);
         const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -23,6 +23,8 @@ const server = http.createServer((req, res) => {
         const chatId = update.message?.chat?.id || 
                        update.callback_query?.message?.chat?.id;
         const text = update.message?.text || '';
+
+        console.log(`[PARSED] ChatID: ${chatId}, Text: ${text}`);
 
         if (chatId && BOT_TOKEN && text.startsWith('/start')) {
           const responseText = "Welcome to **ZZ Games**! 🎮🔥\n\nChoose an option below:";
@@ -52,19 +54,26 @@ const server = http.createServer((req, res) => {
             }
           };
 
-          const tgReq = https.request(options, (tgRes) => {});
-          tgReq.on('error', (e) => {});
+          const tgReq = https.request(options, (tgRes) => {
+            console.log("[TELEGRAM API] Message sent successfully status:", tgRes.statusCode);
+          });
+
+          tgReq.on('error', (e) => {
+            console.error(`[TELEGRAM ERROR]: ${e.message}`);
+          });
+
           tgReq.write(postData);
           tgReq.end();
         }
       } catch (err) {
-        console.error("Error:", err);
+        console.error("[JSON ERROR]:", err);
       }
     });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+const PORT = process.env.PORT || 10000;
+// نکته بسیار مهم: اضافه کردن '0.0.0.0' برای دریافت درخواست‌های خارجی در رندر
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
 });
