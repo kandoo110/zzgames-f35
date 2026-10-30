@@ -1,7 +1,8 @@
 const http = require('http');
+const https = require('https');
 
-const server = http.createServer(async (req, res) => {
-  // همیشه در ابتدای کار پاسخ اولیه را به تلگرام می‌دهیم تا ارتباط قطع نشود
+const server = http.createServer((req, res) => {
+  // پاسخ سریع به تلگرام برای جلوگیری از تایم‌اوت
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ status: 'ok' }));
 
@@ -11,38 +12,54 @@ const server = http.createServer(async (req, res) => {
       body += chunk.toString();
     });
     
-    req.on('end', async () => {
+    req.on('end', () => {
       try {
         const update = JSON.parse(body);
         const BOT_TOKEN = process.env.BOT_TOKEN;
 
         const chatId = update.message?.chat?.id || 
                        update.callback_query?.message?.chat?.id;
-        const text = update.message?.text;
+        const text = update.message?.text || '';
 
-        if (chatId && BOT_TOKEN && text) {
-          // اگر کاربر دستور /start را فرستاد
-          if (text === '/start') {
-            const responseText = "Welcome to **ZZ Games**! 🎮🔥\n\nChoose an option below:";
-            const replyMarkup = {
-              inline_keyboard: [
-                [{ text: "🕹️ Action & Adventure Game", callback_data: "play_action" }],
-                [{ text: "🏰 Strategy Game", callback_data: "play_strategy" }],
-                [{ text: "⭐ Unlock All Games (50 Stars)", pay: true }]
-              ]
-            };
+        // بررسی اینکه پیام /start ارسال شده باشد
+        if (chatId && BOT_TOKEN && text.startsWith('/start')) {
+          const responseText = "Welcome to **ZZ Games**! 🎮🔥\n\nChoose an option below:";
+          const replyMarkup = {
+            inline_keyboard: [
+              [{ text: "🕹️ Action & Adventure Game", callback_data: "play_action" }],
+              [{ text: "🏰 Strategy Game", callback_data: "play_strategy" }],
+              [{ text: "⭐ Unlock All Games (50 Stars)", pay: true }]
+            ]
+          };
 
-            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: chatId,
-                text: responseText,
-                parse_mode: 'Markdown',
-                reply_markup: replyMarkup
-              })
-            });
-          }
+          const postData = JSON.stringify({
+            chat_id: chatId,
+            text: responseText,
+            parse_mode: 'Markdown',
+            reply_markup: replyMarkup
+          });
+
+          const options = {
+            hostname: 'api.telegram.org',
+            port: 443,
+            path: `/bot${BOT_TOKEN}/sendMessage`,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(postData)
+            }
+          };
+
+          const tgReq = https.request(options, (tgRes) => {
+            // درخواست با موفقیت به تلگرام رفت
+          });
+
+          tgReq.on('error', (e) => {
+            console.error(`Telegram Request Error: ${e.message}`);
+          });
+
+          tgReq.write(postData);
+          tgReq.end();
         }
       } catch (err) {
         console.error("Error processing update:", err);
