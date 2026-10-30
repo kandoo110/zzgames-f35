@@ -50,7 +50,7 @@ const server = http.createServer((req, res) => {
           // واکنش به دکمه‌های مختلف
           if (callbackData === 'play_action') {
             // لینک بازی F-35 خود را اینجا بگذارید (یا متغیر محیطی GAME_URL)
-            const gameUrl = process.env.GAME_URL || 'https://zzgames-f35.onrender.com;
+            const gameUrl = process.env.GAME_URL || 'https://zzgames-f35.onrender.com';
             
             sendTelegramMessage(BOT_TOKEN, chatId, "🕹️ برای اجرای بازی F-35 روی دکمه زیر کلیک کنید:", {
               inline_keyboard: [
